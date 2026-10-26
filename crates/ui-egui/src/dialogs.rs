@@ -10,9 +10,7 @@ use serde_json::{Value, json};
 use solidcraft_engine::Sel;
 use solidcraft_engine::Session;
 use solidcraft_engine::doc::expr::Kind as ValueKind;
-use solidcraft_engine::doc::{
-    AxisRef, Direction, FeatureKind, FilletStyle, HoleKind, Operation, PatternKind, PlaneRef, ProfileSel, ThinSide, ThreadHandedness,
-};
+use solidcraft_engine::doc::{AxisRef, Direction, FeatureKind, FilletStyle, HoleKind, Operation, PatternKind, PlaneRef, ProfileSel, ThinSide};
 use solidcraft_engine::geom::{Aabb3, Vec3};
 
 use crate::SolveApp;
@@ -239,7 +237,6 @@ crate::dialog_descriptor::dialog_descriptors! {
             Thread {
                 designation: String,
                 length: String,
-                handedness: ThreadHandedness,
                 /// The last automatic size; a different value is a manual override. Keep automatic
                 /// features automatic when applying, even though their resolved size is visible.
                 suggested: Option<String>,
@@ -415,7 +412,6 @@ pub struct HoleOpts {
     /// Use the full useful cylindrical wall, independently of the drill extents.
     pub thread_full_depth: bool,
     pub thread_depth: String,
-    pub handedness: ThreadHandedness,
 }
 
 impl Default for HoleOpts {
@@ -431,7 +427,6 @@ impl Default for HoleOpts {
             refs: Default::default(),
             thread_full_depth: true,
             thread_depth: "10 mm".into(),
-            handedness: ThreadHandedness::Right,
         }
     }
 }
@@ -4315,9 +4310,6 @@ fn dialog_commands(app: &SolveApp, d: &Dialog) -> Result<Vec<(String, Value)>, S
                     if !opts.thread_full_depth {
                         params["thread_depth"] = json!(opts.thread_depth.trim());
                     }
-                    if !opts.handedness.is_right() {
-                        params["handedness"] = json!(opts.handedness);
-                    }
                 }
                 match *kind {
                     1 => {
@@ -5221,7 +5213,7 @@ pub fn for_feature(app: &SolveApp, id: u64, marker: Option<usize>) -> Option<Dia
             d.extra.insert("pull".into(), pt3(pull.0));
             d
         }
-        FeatureKind::Hole { position, at, direction, diameter, depth, hole, points, thread, thread_depth, handedness, to, references } => {
+        FeatureKind::Hole { position, at, direction, diameter, depth, hole, points, thread, thread_depth, to, references } => {
             let mut d = start("solid.hole")?;
             let mut k = hole_defaults(s);
             if let Kind::Hole { diameter: dia, depth: dep, kind, cb_diameter, cb_depth, cs_diameter, cs_angle, opts } = &mut k {
@@ -5229,7 +5221,6 @@ pub fn for_feature(app: &SolveApp, id: u64, marker: Option<usize>) -> Option<Dia
                 opts.all = depth.is_none();
                 opts.angled = matches!(hole, HoleKind::Drilled { .. });
                 opts.multiple = points.as_ref().is_some_and(|sp| !sp.single);
-                opts.handedness = *handedness;
                 if let Some(th) = thread {
                     opts.tapped = true;
                     opts.thread = th.clone();
