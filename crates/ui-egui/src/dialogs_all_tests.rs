@@ -791,7 +791,7 @@ fn extrude_builds_the_one_region_clicked_where_the_face_outline_cuts_a_profile()
         let sketch = h.app.run("sketch.create", json!({"plane": {"face": [0, 0, 10]}})).unwrap()["sketch"].as_u64().unwrap();
         h.app.run("sketch.circle.center", json!({"center": [10, 0], "radius": 6})).unwrap();
         h.app.run("sketch.finish", json!({})).unwrap();
-        let state = h.app.session.world_state();
+        let state = h.app.session.world_state().unwrap();
         let ss = state.sketch(sketch).unwrap();
         assert_eq!(ss.profiles.len(), 3, "the lens, the crescent past the face and the rest of the face");
         let index = ss.profiles.iter().position(|p| p.region.contains(solidcraft_engine::geom::Vec2::new(x, 0.0))).unwrap();
@@ -809,7 +809,7 @@ fn extrude_builds_the_one_region_clicked_where_the_face_outline_cuts_a_profile()
         let before = h.app.run("inspect.measure", json!({})).unwrap()["total"]["volume_mm3"].as_f64().unwrap();
         let made = h.app.run(id, p.clone()).unwrap()["feature"].as_u64().unwrap();
         let Some(FeatureKind::Extrude { profiles, .. }) = h.app.session.doc.feature(made).map(|f| f.kind.clone()) else { panic!("an extrude") };
-        let after = h.app.session.world_state();
+        let after = h.app.session.world_state().unwrap();
         let used = solidcraft_engine::doc::profile_selection_indices(after.sketch(sketch).unwrap(), &profiles).unwrap();
         assert_eq!(used, vec![index], "the region clicked at x = {x}, and only it");
         let volume = h.app.run("inspect.measure", json!({})).unwrap()["total"]["volume_mm3"].as_f64().unwrap();
