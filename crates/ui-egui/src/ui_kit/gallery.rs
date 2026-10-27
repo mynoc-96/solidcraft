@@ -1092,6 +1092,9 @@ const ELEMENTS: &[Element] = &[
     element!("color_field", |ui, _| {
         color_field(ui, &mut [120, 150, 180]);
     }),
+    element!("color_field_with_opacity", |ui, _| {
+        color_field_with_opacity(ui, &mut [120, 150, 180], &mut 0.5);
+    }),
     element!("slider", |ui, _| {
         slider(ui, &mut 0.5, 0.0..=1.0, Default::default());
     }),
