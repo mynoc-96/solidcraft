@@ -29,6 +29,11 @@
     "color.hex_help": "#rrggbb 또는 #rrggbbaa 입력. 6자리 값은 불투명도 유지",
     "color.hex_hint": "#rrggbb"
   },
+  "vi": {
+    "color.hex": "Hex",
+    "color.hex_help": "Enter #rrggbb or #rrggbbaa; six digits preserve opacity",
+    "color.hex_hint": "#rrggbb"
+  },
   "zh": {
     "color.hex": "Hex",
     "color.hex_help": "输入 #rrggbb 或 #rrggbbaa；六位数保留不透明度",
