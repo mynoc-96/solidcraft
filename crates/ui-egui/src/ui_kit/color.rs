@@ -43,16 +43,26 @@ pub(crate) fn linear_color_field(ui: &mut Ui, rgb: &mut [f64; 3], maximum: f64) 
 
 /// Shared colour button and outside-click-dismissed popover. Retains the enclosing row handle.
 pub(crate) fn color_field(ui: &mut Ui, rgb: &mut [u8; 3]) -> Response {
-    color_field_inner(ui, rgb, None)
+    color_field_inner(ui, rgb, None, false)
 }
 
 /// The same picker, editing the caller's exact opacity without premultiplying RGB.
 /// Call the opaque `color_field` instead when transparency is prohibited (including PBR).
 pub(crate) fn color_field_with_opacity(ui: &mut Ui, rgb: &mut [u8; 3], opacity: &mut f64) -> Response {
-    color_field_inner(ui, rgb, Some(opacity))
+    color_field_inner(ui, rgb, Some(opacity), false)
 }
 
-fn color_field_inner(ui: &mut Ui, rgb: &mut [u8; 3], opacity: Option<&mut f64>) -> Response {
+/// The same picker with a non-editable mixed-value label. Pass no opacity for opaque/PBR callers.
+/// Explicitly accepting the first colour still reports an edit when targets have mixed colours.
+pub(crate) fn mixed_color_field(ui: &mut Ui, rgb: &mut [u8; 3], opacity: Option<&mut f64>, mixed: Option<&str>) -> Response {
+    let response = color_field_inner(ui, rgb, opacity, mixed.is_some());
+    if let Some(mixed) = mixed {
+        super::text(ui, mixed, super::Text::Note("color:mixed"));
+    }
+    response
+}
+
+fn color_field_inner(ui: &mut Ui, rgb: &mut [u8; 3], opacity: Option<&mut f64>, mixed: bool) -> Response {
     let t = Tokens::get();
     let (rect, mut response) = ui.allocate_exact_size(vec2(t.control_height + t.space_6, t.control_height), Sense::click());
     ui.painter().rect(
@@ -78,7 +88,7 @@ fn color_field_inner(ui: &mut Ui, rgb: &mut [u8; 3], opacity: Option<&mut f64>) 
         )
         .show(|ui| {
             super::scope(ui, |ui| {
-                edited = if let Some(opacity) = opacity { color_popover_with_opacity(ui, rgb, Some(opacity)) } else { color_popover(ui, rgb) };
+                edited = if opacity.is_some() || mixed { color_popover_with_opacity(ui, rgb, opacity, mixed) } else { color_popover(ui, rgb) };
             });
         });
     if edited {
@@ -88,46 +98,13 @@ fn color_field_inner(ui: &mut Ui, rgb: &mut [u8; 3], opacity: Option<&mut f64>) 
     if ui.style().explanation_tooltips { response.on_hover_text(i18n::tr("color.edit")) } else { response }
 }
 
-/// A colour swatch and editable hexadecimal field; incomplete text remains local until valid.
-pub(crate) fn color_hex_field(ui: &mut Ui, rgb: &mut [u8; 3], mixed: Option<&str>) -> Response {
-    let id = ui.id().with(("color_hex", label(ui)));
-    let current = format!("#{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]);
-    let is_mixed = mixed.is_some();
-    let initial = || if is_mixed { String::new() } else { current.clone() };
-    let (observed, was_mixed, mut hex) = ui.ctx().data(|d| d.get_temp::<([u8; 3], bool, String)>(id)).unwrap_or_else(|| (*rgb, is_mixed, initial()));
-    if observed != *rgb || was_mixed != is_mixed {
-        hex = initial();
-    }
-    let mut response = color_field(ui, rgb);
-    if response.changed() {
-        hex = format!("#{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]);
-    }
-    let mut field = super::bounded_cell_editor(ui, id.with("field"), &mut hex, mixed.unwrap_or("#RRGGBB"), false, 32);
-    scenario::publish_target(&format!("dialog:color_hex:{}", label(ui)), field.rect);
-    let mut valid = false;
-    if field.changed() {
-        let text = hex.trim();
-        let digits = text.strip_prefix('#').unwrap_or(text);
-        if digits.len() == 6
-            && let Ok(value) = u32::from_str_radix(digits, 16)
-        {
-            *rgb = [(value >> 16) as u8, (value >> 8) as u8, value as u8];
-            valid = true;
-            response.mark_changed();
-        }
-    }
-    field.flags.set(egui::response::Flags::CHANGED, valid);
-    ui.ctx().data_mut(|d| d.insert_temp(id, (*rgb, is_mixed, hex)));
-    response.union(field)
-}
-
 /// Popover body, also rendered independently by the gallery. Format is global, alpha is opaque.
 /// Tokens: form_card_width, control_*, form_*, on_accent, border, radius_xl, font_small, space_*.
 pub(crate) fn color_popover(ui: &mut Ui, rgb: &mut [u8; 3]) -> bool {
-    color_popover_with_opacity(ui, rgb, None)
+    color_popover_with_opacity(ui, rgb, None, false)
 }
 
-fn color_popover_with_opacity(ui: &mut Ui, rgb: &mut [u8; 3], mut opacity: Option<&mut f64>) -> bool {
+fn color_popover_with_opacity(ui: &mut Ui, rgb: &mut [u8; 3], mut opacity: Option<&mut f64>, mixed: bool) -> bool {
     let t = Tokens::get();
     ui.style_mut().drag_value_text_style = egui::TextStyle::Monospace;
     let id = ui.id().with("color_hsv");
@@ -144,6 +121,7 @@ fn color_popover_with_opacity(ui: &mut Ui, rgb: &mut [u8; 3], mut opacity: Optio
     let format_id = egui::Id::new("color_hex_format");
     let mut hexadecimal = ui.ctx().data(|d| d.get_temp::<bool>(format_id)).unwrap_or(false);
     let mut linear = ui.global_style().visuals.numeric_color_space == egui::style::NumericColorSpace::Linear;
+    let mut accepted_mixed = false;
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = t.space_10;
         ui.horizontal(|ui| {
@@ -206,6 +184,7 @@ fn color_popover_with_opacity(ui: &mut Ui, rgb: &mut [u8; 3], mut opacity: Optio
                     && let Some((value, alpha)) = parse_hex(&hex.draft)
                     && (opacity.is_some() || alpha.is_none_or(|a| a == 255))
                 {
+                    accepted_mixed = mixed;
                     *rgb = value;
                     if let (Some(opacity), Some(alpha)) = (opacity.as_deref_mut(), alpha) {
                         *opacity = f64::from(alpha) / 255.0;
@@ -303,7 +282,7 @@ fn color_popover_with_opacity(ui: &mut Ui, rgb: &mut [u8; 3], mut opacity: Optio
         d.insert_temp(format_id, hexadecimal);
     });
     scenario::publish_rect("color:popover", ui.min_rect());
-    *rgb != before_rgb || opacity.as_deref().copied() != before_opacity || hsv != before
+    *rgb != before_rgb || opacity.as_deref().copied() != before_opacity || hsv != before || accepted_mixed
 }
 
 /// Text drafts are independent of model values. Copy retains the last accepted representation,
